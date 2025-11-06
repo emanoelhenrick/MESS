@@ -1,175 +1,207 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
+IFS=$'\n\t'
 
-. /etc/os-release
-
-LOGFILE="mess-install.log"
-exec > >(sudo tee -i $LOGFILE) 2>&1
+# LOG
+LOGFILE="$HOME/mess-install.log"
+exec > >(tee -ia "$LOGFILE") 2>&1
 
 DRY_RUN=0
-if [ "$1" == "--dry-run" ]; then
+if [ "${1:-}" = "--dry-run" ]; then
   echo "Running in dry run mode. No actual changes will be made."
   DRY_RUN=1
 fi
 
-function run_command {
-  if [ $DRY_RUN -eq 1 ]; then
-      echo "[DRY RUN] $@"
+# run_command: receives a single string command
+run_command() {
+  local cmd="$*"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[DRY RUN] $cmd"
   else
-      eval "$@"
+    echo "+ $cmd"
+    eval "$cmd"
   fi
 }
 
-# Error handling function
-function error_exit {
-  echo "$1" >&2
+error_exit() {
+  echo "ERROR: $1" >&2
   exit 1
 }
 
-function set_package_manager {
-  if [ "${ID}" = "fedora" ]; then
-    package_manager="dnf"
+trap 'error_exit "Script failed at line $LINENO"' ERR
 
-  elif [ "${ID}" = "ubuntu" ]  || [ "${ID}" = "debian" ] ; then
-    package_manager="apt-get"
+package_manager=""
 
+set_package_manager() {
+  # /etc/os-release is expected to exist
+  if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
   else
-    echo "(Maybe) your distro is not supported"
-    exit 1
+    error_exit "/etc/os-release not found"
+  fi
+
+  case "${ID:-}" in
+    fedora)
+      package_manager="dnf"
+      ;;
+    rhel|centos)
+      package_manager="yum"
+      ;;
+    ubuntu|debian)
+      package_manager="apt-get"
+      ;;
+    *)
+      error_exit "(Maybe) your distro is not supported: ${ID:-unknown}"
+      ;;
+  esac
+}
+
+update_system() {
+  echo "Updating system (using $package_manager)..."
+  if [ "$package_manager" = "apt-get" ]; then
+    run_command "sudo $package_manager update -qq"
+    run_command "sudo $package_manager upgrade -qq -y"
+    run_command "sudo $package_manager autoremove -qq -y || true"
+  else
+    run_command "sudo $package_manager upgrade -y"
+    run_command "sudo $package_manager autoremove -y || true"
   fi
 }
 
-function update_system {
-  run_command "sudo $package_manager update -qq -y && sudo $package_manager upgrade -qq -y" || error_exit "Failed to upgrade system"
-  run_command "sudo $package_manager autoremove -qq -y" || error_exit "Failed to autoremove packages"
-}
-
-function install_apps {
+install_apps() {
   echo "Installing common software packages..."
-  common_apps=(curl flatpak openssh-server zenity git vim neovim btop zsh shellcheck wget wine)
+  # --- ALTERAÇÃO AQUI ---
+  # Adicionado 'unzip' à lista para garantir que 'install_fonts' funcione.
+  local common_apps=(curl flatpak openssh-server zenity git vim neovim btop zsh shellcheck wget wine unzip)
 
   for app in "${common_apps[@]}"; do
-      if ! command -v "$app" &> /dev/null; then
-        run_command "sudo $package_manager install $app -y" || error_exit "Failed to install $app"
-      else
-        echo "$app is already installed."
-      fi
+    if ! command -v "$app" >/dev/null 2>&1; then
+      run_command "sudo $package_manager install -y $app"
+    else
+      echo "$app is already installed."
+    fi
   done
 }
 
-function install_dev_tools {
+install_dev_tools() {
   echo "Installing Development Tools..."
-  if [ "${ID}" = "fedora" ]; then
-    run_command "sudo $package_manager install @development-tools -y"
-    run_command "sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc"
-    run_command "echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null"
-    run_command "dnf check-update && sudo dnf install code"
+  if [ "$package_manager" = "dnf" ] || [ "$package_manager" = "yum" ]; then
+    # prefer groupinstall, fallback to @development-tools
+    run_command "sudo $package_manager groupinstall -y 'Development Tools' || sudo $package_manager install -y @development-tools || true"
 
-
-  elif [ "${ID}" = "ubuntu" ]  || [ "${ID}" = "debian" ] ; then
-    run_command "sudo $package_manager install build-essential -y"
-
+  elif [ "$package_manager" = "apt-get" ]; then
+    run_command "sudo $package_manager install -y build-essential"
   else
     echo "(Maybe) your distro is not supported"
     exit 1
   fi
 }
 
-function setup_java_and_nvm {
-  echo "Installing SDKMan and Nvm..."
-  run_command "curl -s "https://get.sdkman.io" | bash"
-  run_command "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
+setup_java_and_nvm() {
+  echo "Installing SDKMan and NVM (non-interactive)..."
+  run_command "curl -s https://get.sdkman.io | bash"
+  
+  sleep 1
+  
+  run_command "curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash"
 }
 
-function add_flathub {
-  run_command "sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" || error_exit "Failed to add flathub"
-}
-
-function flatpak_packages {
-  echo "Installing Flatpak Packages..."
-  run_command "flatpak update --appstream -y && flatpak remote-ls flathub > /dev/null" || error_exit "Failed to update flatpak"
-  sleep 2 # cache error? Too fast?
-  run_command "flatpak install flathub \
-    com.protonvpn.www \
-    org.standardnotes.standardnotes \
-    io.github.peazip.PeaZip \
-    com.spotify.Client \
-    org.telegram.desktop \
-    org.torproject.torbrowser-launcher \
-    io.github.flattool.Warehouse \
-    com.github.tchx84.Flatseal --noninteractive" || error_exit "Failed to install flatpak/flathub packages"
-}
-
-function download_fonts {
-  run_command "mkdir -p $HOME/.local/share/fonts"
-  echo "Downloading JetBrains Mono Nerd Font..."
-  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip -P $HOME/.local/share/fonts/"
-
-  run_command "mkdir -p $HOME/.local/share/fonts"
-  echo "Downloading Noto Nerd Font..."
-  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Noto.zip -P $HOME/.local/share/fonts/"
-}
-
-function install_fonts {
-  echo "Installing JetBrains Mono and Noto Nerd Fonts..."
-  run_command "unzip -o $HOME/.local/share/fonts/JetBrainsMono.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip JetBrainsMono Nerd Font"
-  run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
-
-  run_command "unzip -o $HOME/.local/share/fonts/Noto.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip Noto Nerd Font"
-  run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
-}
-
-function repos_set {
-  # NextDNS
-  run_command "sudo wget -qO /usr/share/keyrings/nextdns.gpg https://repo.nextdns.io/nextdns.gpg" || error_exit "Failed to install nextdns"
-}
-
-function install_nextdns {
-  echo "Installing NextDNS..."
-  run_command "sudo curl -sL https://nextdns.io/install > ~/nextdns-install.sh && chmod +x ~/nextdns-install.sh"
-  run_command "sudo ~/nextdns-install.sh install"
-}
-
-# Install Zsh and Oh-My-Zsh
-function install_zsh {
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    echo "Installing Oh-My-Zsh..."
-    read -n 1 -s -r -p "After install ohmyzsh, press CTRL + D to continue, ok? Now press any key..."
-    run_command "sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\"" || error_exit "Failed to install Oh-My-Zsh"
+add_flathub() {
+  if command -v flatpak >/dev/null 2>&1; then
+    run_command "sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
+  else
+    echo "flatpak not installed; skipping add_flathub"
   fi
 }
 
-function set_ohmyzsh {
-  echo "Setting Oh-My-Zsh Plugins e Starship Theme..."
-  # install some plugins to zsh - syntax high lighting and command auto suggestions
-  run_command "mkdir -p ~/.oh-my-zsh/completions"
-  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git  ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-    sleep 2 # error 429 github - too many requests
-  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions          ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-    sleep 2 # error 429 github - too many requests
-  # starship zsh theme
-  run_command "curl -sS https://starship.rs/install.sh | sh -s -- -y"
-  run_command "rm ~/.zshrc"
-    sleep 2 # error 429 github - too many requests
-  run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.zshrc -O ~/.zshrc"
+flatpak_packages() {
+  if command -v flatpak >/dev/null 2>&1; then
+    echo "Installing Flatpak packages..."
+    run_command "flatpak update --appstream -y || true"
+    sleep 1
+    run_command "flatpak install -y flathub \
+      com.protonvpn.www \
+      org.standardnotes.standardnotes \
+      io.github.peazip.PeaZip \
+      com.spotify.Client \
+      org.telegram.desktop \
+      org.torproject.torbrowser-launcher \
+      io.github.flattool.Warehouse \
+      com.github.tchx84.Flatseal"
+  else
+    echo "flatpak not available; skipping flatpak_packages"
+  fi
 }
 
-function sysctl_set {
-  echo "Setting sysctl..."
-  run_command "sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup"
-  run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/sysctl.conf >>/etc/sysctl.conf' "
-  run_command "sudo sysctl -p"
-  sleep 2 # error 429 github - too many requests
+download_fonts() {
+  run_command "mkdir -p \"$HOME/.local/share/fonts\""
+  echo "Downloading JetBrains Mono Nerd Font..."
+  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip -P \"$HOME/.local/share/fonts/\""
+  
+  sleep 1
+  
+  echo "Downloading Noto Nerd Font..."
+  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Noto.zip -P \"$HOME/.local/share/fonts/\""
 }
 
-function create_dev_and_studies_folders {
+install_fonts() {
+  echo "Installing fonts..."
+  run_command "unzip -q -o \"$HOME/.local/share/fonts/JetBrainsMono.zip\" -d \"$HOME/.local/share/fonts/\""
+  run_command "unzip -q -o \"$HOME/.local/share/fonts/Noto.zip\" -d \"$HOME/.local/share/fonts/\""
+  run_command "fc-cache -f -v || true"
+}
+
+repos_set() {
+  echo "Setting up additional repos/keyrings..."
+  run_command "sudo wget -qO /usr/share/keyrings/nextdns.gpg https://repo.nextdns.io/nextdns.gpg || true"
+}
+
+install_nextdns() {
+  echo "Installing NextDNS..."
+  run_command "curl -sL https://nextdns.io/install -o \"$HOME/nextdns-install.sh\" && chmod +x \"$HOME/nextdns-install.sh\""
+  run_command "sudo \"$HOME/nextdns-install.sh\" install || true"
+}
+
+install_zsh() {
+  run_command "chsh -s $(which zsh)"
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    echo "Installing Oh-My-Zsh (non-interactive)..."
+    run_command "RUNZSH=no CHSH=no sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\""
+  else
+    echo "Oh-My-Zsh already installed."
+  fi
+}
+
+set_ohmyzsh() {
+  echo "Configuring Oh-My-Zsh (plugins/themes)..."
+  run_command "mkdir -p \"$HOME/.oh-my-zsh/custom/plugins\" \"$HOME/.oh-my-zsh/completions\""
+  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git \"$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting\" || true"
+  sleep 1
+  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \"$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions\" || true"
+  sleep 1
+  run_command "curl -sS https://starship.rs/install.sh | sh -s -- -y || true"
+
+  # Backup existing .zshrc instead of removing
+  run_command "mv \"$HOME/.zshrc\" \"$HOME/.zshrc.backup\" 2>/dev/null || true"
+  run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.zshrc -O \"$HOME/.zshrc\""
+}
+
+sysctl_set() {
+  echo "Applying sysctl configuration..."
+  run_command "sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup 2>/dev/null || true"
+  run_command "sudo curl -fsSL https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/sysctl.conf -o /etc/sysctl.conf"
+  run_command "sudo sysctl -p || true"
+}
+
+create_dev_and_studies_folders() {
   echo "Creating Dev and Studies folders..."
-  run_command "mkdir $HOME/Documents/dev $HOME/Documents/studies"
+  run_command "mkdir -p \"$HOME/Documents/dev\" \"$HOME/Documents/studies\""
 }
 
-function configure_git {
+configure_git() {
   echo "Configuring Git..."
-  run_command "curl -sS https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.gitconfig -o ~/.gitconfig"
+  run_command "curl -fsS https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.gitconfig -o \"$HOME/.gitconfig\" || true"
 }
 
 main() {
@@ -185,17 +217,15 @@ main() {
   flatpak_packages
   download_fonts
   install_fonts
-  # run_command "sudo dconf update" || error_exit "Failed to update dconf" #gnome only?
   repos_set
-  update_system
-  install_newapps
   install_nextdns
   install_zsh
   set_ohmyzsh
   sysctl_set
-  create_dev_and_studies_folder
+  create_dev_and_studies_folders
+  configure_git
 
-  echo "The environment was successfully configured..."
+  echo "The environment was successfully configured. See $LOGFILE for details."
 }
 
-main
+main "$@"
