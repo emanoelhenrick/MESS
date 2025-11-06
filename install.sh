@@ -136,7 +136,7 @@ function set_ohmyzsh {
       run_command "curl -sS https://starship.rs/install.sh | sh -s -- --bin-dir /data/data/com.termux/files/usr/bin"
       run_command "rm ~/.zshrc"
         sleep 2 # error 429 github - too many requests
-      run_command "wget -c https://raw.githubusercontent.com/Esl1h/dotfiles/main/.zshrc -O ~/.zshrc"
+      run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/.zshrc -O ~/.zshrc"
       echo export ZSH=\""$HOME"/.oh-my-zsh\" >>~/.zshrc
       echo "source \$ZSH/oh-my-zsh.sh" >>~/.zshrc
 }
