@@ -1,0 +1,16 @@
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[user]
+	email = emanoelhenrick.dev@gmail.com
+	name = Emanoel Henrick
+[init]
+	defaultBranch = main
+[alias]
+	s = !git status -s
+	c = !git add . && git commit -m
+	amend = !git add . && git commit --amend --no-edit
+	l = !git log --pretty=format:'%C(blue)%h%C(red)%d %C(white)%s %C(cyan)[%cn] %C(green)%cr'

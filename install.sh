@@ -8,22 +8,22 @@ exec > >(sudo tee -i $LOGFILE) 2>&1
 
 DRY_RUN=0
 if [ "$1" == "--dry-run" ]; then
-    echo "Running in dry run mode. No actual changes will be made."
-    DRY_RUN=1
+  echo "Running in dry run mode. No actual changes will be made."
+  DRY_RUN=1
 fi
 
 function run_command {
-    if [ $DRY_RUN -eq 1 ]; then
-        echo "[DRY RUN] $@"
-    else
-        eval "$@"
-    fi
+  if [ $DRY_RUN -eq 1 ]; then
+      echo "[DRY RUN] $@"
+  else
+      eval "$@"
+  fi
 }
 
 # Error handling function
 function error_exit {
-    echo "$1" >&2
-    exit 1
+  echo "$1" >&2
+  exit 1
 }
 
 function set_package_manager {
@@ -34,134 +34,159 @@ function set_package_manager {
     package_manager="apt-get"
 
   else
-      echo "(Maybe) your distro is not supported"
-      exit 1
-
+    echo "(Maybe) your distro is not supported"
+    exit 1
   fi
 }
 
 function update_system {
-    run_command "sudo $package_manager update -qq -y && sudo $package_manager upgrade -qq -y" || error_exit "Failed to upgrade system"
-    run_command "sudo $package_manager autoremove -qq -y" || error_exit "Failed to autoremove packages"
+  run_command "sudo $package_manager update -qq -y && sudo $package_manager upgrade -qq -y" || error_exit "Failed to upgrade system"
+  run_command "sudo $package_manager autoremove -qq -y" || error_exit "Failed to autoremove packages"
 }
 
 
 function install_apps {
-    echo "Installing common software packages..."
-    common_apps=(curl flatpak openssh-server zenity git vim neovim btop zsh shellcheck wget)
+  echo "Installing common software packages..."
+  common_apps=(curl flatpak openssh-server zenity git vim neovim btop zsh shellcheck wget wine)
 
-    for app in "${common_apps[@]}"; do
-        if ! command -v "$app" &> /dev/null; then
-            run_command "sudo $package_manager install $app -y" || error_exit "Failed to install $app"
-        else
-            echo "$app is already installed."
-        fi
-    done
+  for app in "${common_apps[@]}"; do
+      if ! command -v "$app" &> /dev/null; then
+        run_command "sudo $package_manager install $app -y" || error_exit "Failed to install $app"
+      else
+        echo "$app is already installed."
+      fi
+  done
+}
+
+function install_dev_tools {
+  echo "Installing Development Tools..."
+  if [ "${ID}" = "fedora" ]; then
+    run_command "sudo $package_manager install @development-tools -y"
+    run_command "sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc"
+    run_command "echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null"
+    run_command "dnf check-update && sudo dnf install code"
+
+
+  elif [ "${ID}" = "ubuntu" ]  || [ "${ID}" = "debian" ] ; then
+    run_command "sudo $package_manager install build-essential -y"
+
+  else
+    echo "(Maybe) your distro is not supported"
+    exit 1
+  fi
+}
+
+function setup_java_and_nvm {
+  echo "Installing SDKMan and Nvm..."
+  run_command "curl -s "https://get.sdkman.io" | bash"
+  run_command "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
 }
 
 
 
 function add_flathub {
-    run_command "sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" || error_exit "Failed to add flathub"
-    }
+  run_command "sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" || error_exit "Failed to add flathub"
+}
 
 
 function flatpak_packages {
-    run_command "flatpak update --appstream -y && flatpak remote-ls flathub > /dev/null" || error_exit "Failed to update flatpak"
-    sleep 2 # cache error? Too fast?
-    run_command "flatpak install flathub \
-        com.protonvpn.www \
-        org.standardnotes.standardnotes \
-        io.github.peazip.PeaZip \
-        com.spotify.Client \
-        org.telegram.desktop \
-        org.torproject.torbrowser-launcher \
-        io.github.flattool.Warehouse \
-        com.github.tchx84.Flatseal --noninteractive" || error_exit "Failed to install flatpak/flathub packages"
+  echo "Installing Flatpak Packages..."
+  run_command "flatpak update --appstream -y && flatpak remote-ls flathub > /dev/null" || error_exit "Failed to update flatpak"
+  sleep 2 # cache error? Too fast?
+  run_command "flatpak install flathub \
+    com.protonvpn.www \
+    org.standardnotes.standardnotes \
+    io.github.peazip.PeaZip \
+    com.spotify.Client \
+    org.telegram.desktop \
+    org.torproject.torbrowser-launcher \
+    io.github.flattool.Warehouse \
+    com.github.tchx84.Flatseal --noninteractive" || error_exit "Failed to install flatpak/flathub packages"
 }
 
 function download_fonts {
-    run_command "mkdir -p $HOME/.local/share/fonts"
-    echo "Downloading JetBrains Mono Nerd Font..."
-    run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip -P $HOME/.local/share/fonts/"
+  run_command "mkdir -p $HOME/.local/share/fonts"
+  echo "Downloading JetBrains Mono Nerd Font..."
+  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip -P $HOME/.local/share/fonts/"
 
-    run_command "mkdir -p $HOME/.local/share/fonts"
-    echo "Downloading Noto Nerd Font..."
-    run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Noto.zip -P $HOME/.local/share/fonts/"
+  run_command "mkdir -p $HOME/.local/share/fonts"
+  echo "Downloading Noto Nerd Font..."
+  run_command "wget -c https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Noto.zip -P $HOME/.local/share/fonts/"
 }
 
 function install_fonts {
-    run_command "unzip -o $HOME/.local/share/fonts/JetBrainsMono.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip JetBrainsMono Nerd Font"
-    run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
+  echo "Installing JetBrains Mono and Noto Nerd Fonts..."
+  run_command "unzip -o $HOME/.local/share/fonts/JetBrainsMono.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip JetBrainsMono Nerd Font"
+  run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
 
-    run_command "unzip -o $HOME/.local/share/fonts/Noto.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip Noto Nerd Font"
-    run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
+  run_command "unzip -o $HOME/.local/share/fonts/Noto.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip Noto Nerd Font"
+  run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
 }
 
 
 function repos_set {
   # NextDNS
-    run_command "sudo wget -qO /usr/share/keyrings/nextdns.gpg https://repo.nextdns.io/nextdns.gpg" || error_exit "Failed to install nextdns"
-
+  run_command "sudo wget -qO /usr/share/keyrings/nextdns.gpg https://repo.nextdns.io/nextdns.gpg" || error_exit "Failed to install nextdns"
 }
 
 function install_nextdns {
-      run_command "sudo curl -sL https://nextdns.io/install > ~/nextdns-install.sh && chmod +x ~/nextdns-install.sh"
-      run_command "sudo ~/nextdns-install.sh install"
+  echo "Installing NextDNS..."
+  run_command "sudo curl -sL https://nextdns.io/install > ~/nextdns-install.sh && chmod +x ~/nextdns-install.sh"
+  run_command "sudo ~/nextdns-install.sh install"
 }
 
 # Install Zsh and Oh-My-Zsh
 function install_zsh {
-    if [ ! -d "$HOME/.oh-my-zsh" ]; then
-        echo "Installing Oh-My-Zsh..."
-        read -n 1 -s -r -p "After install ohmyzsh, press CTRL + D to continue, ok? Now press any key..."
-        run_command "sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\"" || error_exit "Failed to install Oh-My-Zsh"
-    fi
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    echo "Installing Oh-My-Zsh..."
+    read -n 1 -s -r -p "After install ohmyzsh, press CTRL + D to continue, ok? Now press any key..."
+    run_command "sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\"" || error_exit "Failed to install Oh-My-Zsh"
+  fi
 }
 
 function set_ohmyzsh {
-      # install some plugins to zsh - syntax high lighting and command auto suggestions
-      run_command "mkdir -p ~/.oh-my-zsh/completions"
-      run_command "git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git  ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-        sleep 2 # error 429 github - too many requests
-      run_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions          ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-        sleep 2 # error 429 github - too many requests
-      # starship zsh theme
-      run_command "curl -sS https://starship.rs/install.sh | sh -s -- --bin-dir /data/data/com.termux/files/usr/bin"
-      run_command "rm ~/.zshrc"
-        sleep 2 # error 429 github - too many requests
-      run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.zshrc -O ~/.zshrc"
-      echo export ZSH=\""$HOME"/.oh-my-zsh\" >>~/.zshrc
-      echo "source \$ZSH/oh-my-zsh.sh" >>~/.zshrc
+  echo "Setting Oh-My-Zsh Plugins e Starship Theme..."
+  # install some plugins to zsh - syntax high lighting and command auto suggestions
+  run_command "mkdir -p ~/.oh-my-zsh/completions"
+  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git  ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    sleep 2 # error 429 github - too many requests
+  run_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions          ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    sleep 2 # error 429 github - too many requests
+  # starship zsh theme
+  run_command "curl -sS https://starship.rs/install.sh | sh -s -- -y"
+  run_command "rm ~/.zshrc"
+    sleep 2 # error 429 github - too many requests
+  run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.zshrc -O ~/.zshrc"
 }
 
 function sysctl_set {
-    run_command "sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup"
-    run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/sysctl.conf >>/etc/sysctl.conf' "
-    run_command "sudo sysctl -p"
-    sleep 2 # error 429 github - too many requests
-
+  echo "Setting sysctl..."
+  run_command "sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup"
+  run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/sysctl.conf >>/etc/sysctl.conf' "
+  run_command "sudo sysctl -p"
+  sleep 2 # error 429 github - too many requests
 }
 
-# function ssh_set {
-#   run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/Esl1h/dotfiles/main/etc/ssh/ssh_config >/etc/ssh/ssh_config' "
-#   run_command "sudo systemctl enable sshd"
-#   run_command "sudo systemctl start sshd"
-# }
-
-function dont_need_this {
-    sudo su - root -c 'cat <<EOF >>/etc/fstab
-tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0
-tmpfs /var/tmp tmpfs defaults,noatime,mode=1777 0 0
-tmpfs /var/log tmpfs defaults,noatime,mode=0755 0 0
-EOF
-'
+function create_dev_and_studies_folders {
+  echo "Creating Dev and Studies folders..."
+  run_command "mkdir $HOME/Documents/dev $HOME/Documents/studies"
 }
+
+function configure_git {
+  echo "Configuring Git..."
+  run_command "curl -sS https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.gitconfig -o ~/.gitconfig"
+}
+
 
 main() {
+  echo "MANEL'S ENVIRONMENT SETUP SCRIPT"
+  echo "Initializing the environment setup..."
+
   set_package_manager
   update_system
   install_apps
+  install_dev_tools
+  setup_java_and_nvm
   add_flathub
   flatpak_packages
   download_fonts
@@ -174,8 +199,9 @@ main() {
   install_zsh
   set_ohmyzsh
   sysctl_set
-  dont_need_this
-  set_vim
+  create_dev_and_studies_folder
+
+  echo "The environment was successfully configured..."
 }
 
 main
