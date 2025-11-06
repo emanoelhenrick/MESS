@@ -152,17 +152,6 @@ install_fonts() {
   run_command "fc-cache -f -v || true"
 }
 
-repos_set() {
-  echo "Setting up additional repos/keyrings..."
-  run_command "sudo wget -qO /usr/share/keyrings/nextdns.gpg https://repo.nextdns.io/nextdns.gpg || true"
-}
-
-install_nextdns() {
-  echo "Installing NextDNS..."
-  run_command "curl -sL https://nextdns.io/install -o \"$HOME/nextdns-install.sh\" && chmod +x \"$HOME/nextdns-install.sh\""
-  run_command "sudo "$HOME/nextdns-install.sh" install || true"
-}
-
 install_zsh() {
   run_command "chsh -s $(which zsh)"
   if [ ! -d "$HOME/.oh-my-zsh" ]; then
@@ -217,8 +206,6 @@ main() {
   flatpak_packages
   download_fonts
   install_fonts
-  repos_set
-  install_nextdns
   install_zsh
   set_ohmyzsh
   sysctl_set
