@@ -160,7 +160,7 @@ repos_set() {
 install_nextdns() {
   echo "Installing NextDNS..."
   run_command "curl -sL https://nextdns.io/install -o \"$HOME/nextdns-install.sh\" && chmod +x \"$HOME/nextdns-install.sh\""
-  run_command "sudo \"$HOME/nextdns-install.sh\" install || true"
+  run_command "sudo "$HOME/nextdns-install.sh" install || true"
 }
 
 install_zsh() {
