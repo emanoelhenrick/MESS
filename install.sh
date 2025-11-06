@@ -2,10 +2,6 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# LOG
-LOGFILE="$HOME/mess-install.log"
-exec > >(tee -ia "$LOGFILE") 2>&1 < /dev/tty
-
 DRY_RUN=0
 if [ "${1:-}" = "--dry-run" ]; then
   echo "Running in dry run mode. No actual changes will be made."
