@@ -57,12 +57,6 @@ function install_apps {
             echo "$app is already installed."
         fi
     done
-
-    if [ "${ID}" = "fedora" ]; then
-        run_command "sudo $package_manager install wireguard-tools -y"
-    else
-        run_command "sudo $package_manager install wireguard -y"
-    fi
 }
 
 
@@ -136,23 +130,24 @@ function set_ohmyzsh {
       run_command "curl -sS https://starship.rs/install.sh | sh -s -- --bin-dir /data/data/com.termux/files/usr/bin"
       run_command "rm ~/.zshrc"
         sleep 2 # error 429 github - too many requests
-      run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/.zshrc -O ~/.zshrc"
+      run_command "wget -c https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.zshrc -O ~/.zshrc"
       echo export ZSH=\""$HOME"/.oh-my-zsh\" >>~/.zshrc
       echo "source \$ZSH/oh-my-zsh.sh" >>~/.zshrc
 }
 
 function sysctl_set {
-    run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/Esl1h/dotfiles/main/etc/sysctl.conf >>/etc/sysctl.conf' "
+    run_command "sudo cp /etc/sysctl.conf /etc/sysctl.conf.backup"
+    run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/sysctl.conf >>/etc/sysctl.conf' "
     run_command "sudo sysctl -p"
     sleep 2 # error 429 github - too many requests
 
 }
 
-function ssh_set {
-  run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/Esl1h/dotfiles/main/etc/ssh/ssh_config >/etc/ssh/ssh_config' "
-  run_command "sudo systemctl enable sshd"
-  run_command "sudo systemctl start sshd"
-}
+# function ssh_set {
+#   run_command "sudo su - root -c 'curl https://raw.githubusercontent.com/Esl1h/dotfiles/main/etc/ssh/ssh_config >/etc/ssh/ssh_config' "
+#   run_command "sudo systemctl enable sshd"
+#   run_command "sudo systemctl start sshd"
+# }
 
 function dont_need_this {
     sudo su - root -c 'cat <<EOF >>/etc/fstab
@@ -162,19 +157,6 @@ tmpfs /var/log tmpfs defaults,noatime,mode=0755 0 0
 EOF
 '
 }
-
-function set_vim {
-  run_command "mkdir -p ~/.vim/autoload"
-  # install VIm-Plug
-  run_command "curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim"
-  sleep 2 # error 429 github - too many requests
-  # vimrc from my dotfiles repo
-  run_command "curl https://raw.githubusercontent.com/Esl1h/dotfiles/main/.vimrc > ~/.vimrc"
-  #
-  read -n 1 -s -r -p "Open vim to install and update plugins, ok? Press any key to continue"
-}
-
-
 
 main() {
   set_package_manager
@@ -192,7 +174,6 @@ main() {
   install_zsh
   set_ohmyzsh
   sysctl_set
-  ssh_set
   dont_need_this
   set_vim
 }
