@@ -44,7 +44,6 @@ function update_system {
   run_command "sudo $package_manager autoremove -qq -y" || error_exit "Failed to autoremove packages"
 }
 
-
 function install_apps {
   echo "Installing common software packages..."
   common_apps=(curl flatpak openssh-server zenity git vim neovim btop zsh shellcheck wget wine)
@@ -82,12 +81,9 @@ function setup_java_and_nvm {
   run_command "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
 }
 
-
-
 function add_flathub {
   run_command "sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" || error_exit "Failed to add flathub"
 }
-
 
 function flatpak_packages {
   echo "Installing Flatpak Packages..."
@@ -122,7 +118,6 @@ function install_fonts {
   run_command "unzip -o $HOME/.local/share/fonts/Noto.zip -d $HOME/.local/share/fonts/" || error_exit "Failed to unzip Noto Nerd Font"
   run_command "fc-cache -f -v" || error_exit "Failed to refresh font cache"
 }
-
 
 function repos_set {
   # NextDNS
@@ -176,7 +171,6 @@ function configure_git {
   echo "Configuring Git..."
   run_command "curl -sS https://raw.githubusercontent.com/emanoelhenrick/MESS/main/files/.gitconfig -o ~/.gitconfig"
 }
-
 
 main() {
   echo "MANEL'S ENVIRONMENT SETUP SCRIPT"
