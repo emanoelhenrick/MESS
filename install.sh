@@ -15,7 +15,7 @@ run_command() {
     echo "[DRY RUN] $cmd"
   else
     echo "+ $cmd"
-    eval "$cmd"
+    eval "$cmd" < /dev/tty
   fi
 }
 
@@ -149,6 +149,7 @@ install_fonts() {
 }
 
 install_zsh() {
+  run_command "chsh -s $(which zsh)"
   if [ ! -d "$HOME/.oh-my-zsh" ]; then
     echo "Installing Oh-My-Zsh (non-interactive)..."
     run_command "RUNZSH=no CHSH=no sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\""
