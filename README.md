@@ -2,5 +2,5 @@
 Post-installation script to install and configure my digital mess :P 
 
 ```bash
-curl -s "https://raw.githubusercontent.com/emanoelhenrick/MESS/main/install.sh" | bash
+curl -s "https://raw.githubusercontent.com/emanoelhenrick/MESS/main/mess.sh" | bash
 ```
